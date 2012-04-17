@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+
+# Plug this into openvpn.conf as the client-connect script
+# and dynamically add iptables rules
+#
+# Author Ruoyan Wong
+# Date   10/01/2011
+
+IPTABLES="/sbin/iptables"
+
+GROUP=(
+  GROUP-ILO-GUEST
+  GROUP-ILO-POWER
+  GROUP-ILO-ADMIN
+)
+
+#IBM X3650M2		5900
+#IBM X3650M3		5900
+#HP 180G6 			443
+#HP DL380G6			23
+#Dell FS12-TY		2068
+#PR2012NS			5900,5901
+#Dell R710			5900
+#I420r-G			5900
+#5212L				7578
+#RH2285				2198
+#PR2012S			443
+#Dell FS12			443
+#HP DL180G5			80
+#Dell PE2950MLK		5900,5901
+#Dell PE2950		443
+#HP DL380G5			23
+#HP DL380G7			17988,17990
+
+GUEST_ACCESS_PORT="23,80,443,2068,2198,3900,5900,5901,7578,17990"
+POWER_ACCESS_PORT="23,80,443,2068,2198,3668,3669,3900,5900,5901,7578,17988,17990"
+ADMIN_ACCESS_PORT="0:65535"
+
+
+for((count=0; count<${#GROUP[@]}; count++));do
+
+	$IPTABLES -F ${GROUP[count]}
+	
+	$IPTABLES -N ${GROUP[count]}
+	$IPTABLES -A ${GROUP[count]} -p icmp -j ACCEPT
+
+	case ${GROUP[count]} in
+		GROUP-ILO-GUEST) 
+			$IPTABLES -A ${GROUP[count]} -p tcp -m multiport --dport ${GUEST_ACCESS_PORT} -j ACCEPT
+			;;
+		GROUP-ILO-POWER) 
+			$IPTABLES -A ${GROUP[count]} -p tcp -m multiport --dport ${POWER_ACCESS_PORT} -j ACCEPT
+			;;
+		GROUP-ILO-ADMIN) 
+			$IPTABLES -A ${GROUP[count]} -p tcp -m multiport --dport ${ADMIN_ACCESS_PORT} -j ACCEPT
+			;;
+	esac
+	
+	$IPTABLES -A ${GROUP[count]} -j DROP 
+done
+
+exit 0

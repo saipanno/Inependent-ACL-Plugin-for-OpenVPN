@@ -1,0 +1,15 @@
+#!/usr/bin/expect
+#
+set timeout 20
+set NAME [lindex $argv 0] 
+
+spawn telnet localhost 7505
+expect {
+	"type 'help' for more info\r" {
+		send "kill $NAME\r"
+	} timeout {
+		exit
+	} eof {
+		exit
+	}
+}

@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+
+# Plug this into openvpn.conf as the client-connect script
+# and dynamically add iptables rules
+#
+# Author Ruoyan Wong
+# Date   10/01/2011
+
+function DEL-IPTABLES-FUNC {
+
+    while true;do
+        eval "$1"
+        [ $? != 0 ] && break
+    done
+
+}
+
+function getEntries {
+
+	mysql -NBr -h $DB_SERVER -u $DB_USER -p$DB_PASSWD -D $DB_DATABASE_NAME << EOF
+		select *
+		from $DB_TABLE_NAME
+		where NAME = '$1'
+EOF
+
+}
+
+
+IPTABLES="sudo /sbin/iptables"
+LOGFILE="/var/log/openvpn-iptables.log"
+
+DB_USER="user"
+DB_PASSWD="password"
+DB_SERVER="server"
+DB_DATABASE_NAME="database"
+DB_TABLE_NAME="table"
+
+USERNAME=${common_name}
+DATE=`date +"%Y/%m/%d %H:%M"`
+TITLE="[${DATE}][${USERNAME}][ADD]"
+CLIENT_ADDR=${ifconfig_pool_remote_ip}
+
+echo "USER $USERNAME LOGIN." >> $LOGFILE
+
+getEntries $USERNAME | while read oneline;do
+	
+	GROUP=`echo $oneline | awk '{ print $2 }'`
+	REMOTE_ADDRS=`echo $oneline | awk '{ gsub(","," ",$3);print $3 }'`
+	
+	DEL-IPTABLES-FUNC "${IPTABLES} -X ${USERNAME} >> /dev/null 2>&1" 
+	echo "${TITLE} ${IPTABLES} -N ${USERNAME}" >> $LOGFILE
+	${IPTABLES} -N ${USERNAME} >> $LOGFILE 2>&1
+	DEL-IPTABLES-FUNC "${IPTABLES} -D FORWARD -s $CLIENT_ADDR -j $USERNAME >> /dev/null 2>&1"
+	echo "${TITLE} ${IPTABLES} -I FORWARD -s $CLIENT_ADDR -j $USERNAME" >> $LOGFILE
+	${IPTABLES} -I FORWARD -s $CLIENT_ADDR -j $USERNAME >> $LOGFILE 2>&1
+	for REMOTE_ADDR in $REMOTE_ADDRS;do
+		DEL-IPTABLES-FUNC "${IPTABLES} -D ${USERNAME} -d ${REMOTE_ADDR} -j ${GROUP} >> /dev/null 2>&1"
+		echo "${TITLE} ${IPTABLES} -I ${USERNAME} -d ${REMOTE_ADDR} -j ${GROUP}" >> $LOGFILE
+		${IPTABLES} -I ${USERNAME} -d ${REMOTE_ADDR} -j ${GROUP} >> $LOGFILE 2>&1
+	done
+
+done
+
+echo "${TITLE} ${IPTABLES} -A ${USERNAME} -j DROP" >> $LOGFILE
+${IPTABLES} -A ${USERNAME} -j DROP >> $LOGFILE 2>&1
+
+${IPTABLES} -L ${USERNAME} >> /dev/null 2>&1
+if [ $? == 0 ];then
+	exit 0
+else
+	exit 1
+fi
